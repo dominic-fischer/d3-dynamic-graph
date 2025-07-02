@@ -45,9 +45,8 @@
     "url": "https://github.com/davidnmora/d3-dynamic-graph/issues"
   },
   "homepage": "https://github.com/davidnmora/d3-dynamic-graph#readme",
-  "dependencies": {},
   "peerDependencies": {
-    "d3": "^7.7.0"
+    "d3": "^7.9.0"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^5.47.1",

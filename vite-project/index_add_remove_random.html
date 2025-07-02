@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>D3 Dynamic Graph with Removal</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: sans-serif;
+      }
+      #controls {
+        padding: 10px;
+        background: #f0f0f0;
+      }
+      button {
+        padding: 8px 12px;
+        margin-right: 8px;
+        font-size: 16px;
+        cursor: pointer;
+      }
+      #dynamic-graph-container {
+        width: 100%;
+        height: 600px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="controls">
+      <button id="add-random">Add Random Node</button>
+      <button id="remove-random">Remove Random Node(s)</button>
+    </div>
+    <div id="dynamic-graph-container"></div>
+
+    <script type="module">
+      import * as d3 from "d3";
+      import DynamicGraph from "./src/d3-dynamic-graph";
+
+      // Initial data
+      let nodes = [
+        { id: "foo", radius: 10 },
+        { id: "bar", radius: 20 },
+        { id: "bat", radius: 5 },
+      ];
+      let links = [
+        { source: "foo", sourceId: "foo", target: "bar", targetId: "bar" },
+        { source: "foo", sourceId: "foo", target: "bat", targetId: "bat" },
+      ];
+
+      // Create the visualization
+      const vis = DynamicGraph(d3.select("#dynamic-graph-container"), d3, {
+        width: 1000,
+      })
+        .nodeRadius((node) => node.radius)
+        .tooltipInnerHTML((node) => node.id)
+        .updateVis(nodes, links);
+
+      // Utility: regenerate links based on current nodes
+      function regenerateLinks() {
+        const ids = new Set(nodes.map((n) => n.id));
+        links = links.filter((l) => ids.has(l.source) && ids.has(l.target));
+      }
+
+      // Remove random subset of nodes (e.g., ~50%)
+      function removeRandomNodes() {
+        nodes = nodes.filter(() => Math.random() > 0.5);
+        regenerateLinks();
+        vis.updateVis(nodes, links);
+      }
+
+      // (Optional) Add a random new node
+      function addRandomNode() {
+        const newId = `n${Math.floor(Math.random() * 10000)}`;
+        const newNode = { id: newId, radius: 10 + Math.random() * 20 };
+        // randomly connect to an existing node
+        const target = nodes[Math.floor(Math.random() * nodes.length)];
+        const newLink = {
+          source: newNode.id,
+          sourceId: newNode.id,
+          target: target.id,
+          targetId: target.id,
+        };
+        nodes.push(newNode);
+        links.push(newLink);
+        vis.updateVis(nodes, links);
+      }
+
+      // Attach button handlers
+      d3.select("#remove-random").on("click", removeRandomNodes);
+      d3.select("#add-random").on("click", addRandomNode);
+    </script>
+  </body>
+</html>

@@ -2,10 +2,10 @@ const DynamicGraph = (d3SelectedVisContainer, d3, optionalPubVars) => {
   // 1. GLOBAL VARIALBES -------------------------------------------------------------------------
   // Public variables width default settings
   let pubVar = {
-    width: 600, // pixles
-    height: 600, // pixles
+    width: window.innerWidth, // pixles
+    height: window.innerHeight, // pixles
     transitionTime: 750, // milliseconds
-    centeringForce: 0.09,
+    centeringForce: 0.005,
     // e.g. Nodes: [{id: "foo"}, {id: "bar"}] Links: [{source: "foo", target: "bar"}]
     nodeRefProp: "id",
     unfocusOpacity: 0.4,
@@ -35,7 +35,8 @@ const DynamicGraph = (d3SelectedVisContainer, d3, optionalPubVars) => {
   let svg = d3SelectedVisContainer
     .append("svg")
     .attr("width", pubVar.width)
-    .attr("height", pubVar.height);
+    .attr("height", pubVar.height)
+    .style("display", "block");
 
   // FOCUS NODE: TOOLTIP AND NEIGHBOR HIGHLIGHT -------------------------------------------------------------------------
   const tooltip = d3SelectedVisContainer
@@ -146,7 +147,7 @@ const DynamicGraph = (d3SelectedVisContainer, d3, optionalPubVars) => {
         const y = Math.max(r, Math.min(pubVar.width - r, d.y));
         d.y = y;
         return y;
-      });
+      })
   }
 
   // 5. UPDATE GRAPH AFTER FILTERING DATA -------------------------------------------------------------------------
@@ -158,36 +159,56 @@ const DynamicGraph = (d3SelectedVisContainer, d3, optionalPubVars) => {
         .force(
           "link",
           d3.forceLink().id((node) => node[pubVar.nodeRefProp])
+          .distance(10)     // rest length = 100px
         )
-        .force("charge", d3.forceManyBody())
+        .force("charge", d3.forceManyBody().strength(-500))
         .force("x", d3.forceX(pubVar.width / 2).strength(pubVar.centeringForce))
         .force(
           "y",
           d3.forceY(pubVar.height / 2).strength(pubVar.centeringForce)
         )
-        .velocityDecay(0.8);
+        .velocityDecay(0.9)
+        .force("bounds", () => {
+          for (const d of simulation.nodes()) {
+            const r = pubVar.nodeRadius(d);
+            // bottom
+            if (d.y > pubVar.height - r) {
+              d.y  = pubVar.height - r;
+              d.vy = 0;
+            }
+            // top
+            if (d.y < r) {
+              d.y  = r;
+              d.vy = 0;
+            }
+            // (and similarly for x)
+          }
+        })
+        .force("collide", 
+          d3.forceCollide()
+            .radius(d => pubVar.nodeRadius(d) + 5)   // 5px padding
+            .strength(0.7)                           // tuning parameter
+        );
+
       simulation.nodes(nodes).on("tick", ticked);
       simulation.force("link").links(links);
     }
 
     simulation.stop();
 
-    if (!link) {
-      link = svg.append("g").attr("class", "links").selectAll("line");
-    }
-    link = link.data(links);
-
     if (!node) {
       node = svg.append("g").attr("class", "nodes").selectAll("circle");
 
       nodes.forEach((d) => {
         // if not supplied, distribute randomly
+        
         const startingXPos = pubVar.nodeStartXPos
           ? pubVar.nodeStartXPos(d)
           : Math.random() * pubVar.width;
         const startingYPos = pubVar.nodeStartYPos
           ? pubVar.nodeStartYPos(d)
           : Math.random() * pubVar.height;
+
 
         d.x = d.cx = startingXPos;
         d.y = d.cy = startingYPos;
@@ -207,6 +228,12 @@ const DynamicGraph = (d3SelectedVisContainer, d3, optionalPubVars) => {
     node = node
       .enter()
       .append("circle")
+      .each(d => {
+        // Seed every entering node at the centre ± 50px
+        const jitter = 50;
+        d.x = pubVar.width/2  + (Math.random()*2 - 1)*jitter;
+        d.y = pubVar.height/2 + (Math.random()*2 - 1)*jitter;
+        })
       .attr("class", "node")
       .attr("fill", pubVar.nodeColor)
       .style("opacity", pubVar.unfocusOpacity)
@@ -244,55 +271,55 @@ const DynamicGraph = (d3SelectedVisContainer, d3, optionalPubVars) => {
 
     // Apply the general update pattern to the links.
     // Keep the exiting links connected to the moving remaining nodes.
-    link
-      .exit()
+    // Apply the general update pattern to the links, using a key so D3 can
+    // track each link across time‐filter reorders:
+    // Apply the general update pattern to the links, using a key so D3 can
+        // track each link across time‐filter reorders:
+    // Apply the general update pattern to the links, using a key so D3
+    // can track each link across arbitrary re-filtering:
+    if (!link) {
+      link = svg
+        .append("g")
+          .attr("class", "links")
+        .selectAll("line");
+    }
+
+    // supply d.sourceId + '-' + d.targetId as the key:
+    link = link.data(
+      links,
+      d => d.sourceId + "-" + d.targetId
+    );
+
+    // EXIT old links
+    link.exit()
       .transition()
-      .duration(pubVar.transitionTime)
-      .attr("stroke-opacity", 0)
-      .attrTween("x1", function (d) {
-        return function () {
-          return d.source.x;
-        };
-      })
-      .attrTween("x2", function (d) {
-        return function () {
-          return d.target.x;
-        };
-      })
-      .attrTween("y1", function (d) {
-        return function () {
-          return d.source.y;
-        };
-      })
-      .attrTween("y2", function (d) {
-        return function () {
-          return d.target.y;
-        };
-      })
+        .duration(pubVar.transitionTime)
+        .attr("stroke-opacity", 0)
       .remove();
 
-    link = link
-      .enter()
+    // ENTER new links
+    const linkEnter = link.enter()
       .append("line")
-      .attr(
-        "class",
-        (link) =>
-          "link link-" +
-          link.source[pubVar.nodeRefProp] +
-          " link-" +
-          link.target[pubVar.nodeRefProp]
-      )
-      .call(function (link) {
-        link.transition().attr("stroke-opacity", 1);
-      })
-      .attr("stroke", pubVar.linkColor)
-      .attr("stroke-width", pubVar.unfocusStrokeThickness)
-      .merge(link);
+        .attr("class", d =>
+          `link link-${d.sourceId} link-${d.targetId}`
+        )
+        .attr("stroke", pubVar.linkColor)
+        .attr("stroke-width", pubVar.unfocusStrokeThickness)
+        .attr("stroke-opacity", 0);
 
-    // Update and restart the simulation.
+    // FADE in the new ones
+    linkEnter.transition()
+        .duration(pubVar.transitionTime)
+        .attr("stroke-opacity", 1);
+
+    // MERGE for the simulation
+    link = linkEnter.merge(link);
+
+    // Update and restart the simulation
     simulation.nodes(nodes);
     simulation.force("link").links(links);
-    simulation.alpha(1).restart();
+    simulation.alpha(0.8).restart();
+
   }
 
   // DRAG EVENTS ______________________________
